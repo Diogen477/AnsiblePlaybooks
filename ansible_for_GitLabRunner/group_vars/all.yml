@@ -1,0 +1,11 @@
+# Учётные данные для портала 1С (общие для EDT и Platform)
+releases_login: "releases_login"
+releases_pass: "releases_pass"
+
+# Версии продуктов
+edt_version: "2024.2.6"
+platform_version: "8.3.25.1633"
+sonar_scanner_version: "5.0.1.3006"
+
+# Настройки RDP
+rdp_port: 3389

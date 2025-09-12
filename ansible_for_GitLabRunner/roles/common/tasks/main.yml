@@ -1,0 +1,37 @@
+---
+- name: Обновление индексов пакетов
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Обновление системы
+  apt:
+    upgrade: dist
+    cache_valid_time: 3600
+
+- name: Установка базовых пакетов
+  apt:
+    name:
+      - ssh
+      - sshpass
+      - unzip
+      - screen
+      - curl
+      - wget
+      - software-properties-common
+    state: present
+
+- name: Установка графической оболочки и RDP
+  apt:
+    name:
+      - xorg
+      - openbox
+      - xvfb
+      - xrdp
+    state: present
+
+- name: Запуск и включение службы xrdp
+  service:
+    name: xrdp
+    state: started
+    enabled: yes

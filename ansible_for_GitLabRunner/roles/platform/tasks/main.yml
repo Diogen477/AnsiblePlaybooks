@@ -1,0 +1,96 @@
+---
+- name: Создание временного каталога для загрузки
+  tempfile:
+    state: directory
+    suffix: platform_install
+  register: platform_temp_dir
+
+- name: Получение HTML-страницы с ссылкой на дистрибутив Platform
+  uri:
+    url: "https://releases.1c.ru/version_file?nick=Platform83&ver={{ platform_version }}"
+    method: GET
+    user: "{{ releases_login }}"
+    password: "{{ releases_pass }}"
+    force_basic_auth: yes
+    status_code: 200
+    return_content: yes
+    headers:
+      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+    follow_redirects: yes
+  register: platform_page
+  until: platform_page is succeeded
+  retries: 3
+  delay: 10
+
+- name: Сохранение HTML для отладки (при необходимости)
+  copy:
+    content: "{{ platform_page.content }}"
+    dest: "/tmp/platform_page.html"
+  when: false  # Измените на true для отладки
+
+- name: Поиск ссылки для скачивания Platform
+  set_fact:
+    platform_download_url: "{{ platform_page.content | regex_search('https://[^\\\"]+/public/file/get/[^\\\"]+') }}"
+
+- name: Проверка что ссылка найдена
+  fail:
+    msg: "Не удалось найти ссылку для скачивания Platform на странице. Проверьте учетные данные и доступность версии {{ platform_version }}."
+  when: platform_download_url is not defined or platform_download_url == ""
+
+- name: Загрузка дистрибутива 1C:Platform
+  get_url:
+    url: "{{ platform_download_url }}"
+    dest: "{{ platform_temp_dir.path }}/server64_8_3_{{ platform_version | replace('.', '_') }}.zip"
+    url_username: "{{ releases_login }}"
+    url_password: "{{ releases_pass }}"
+    force_basic_auth: yes
+    headers:
+      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+  register: download_platform
+  until: download_platform is succeeded
+  retries: 3
+  delay: 10
+
+- name: Проверка формата скачанного файла
+  command: file "{{ platform_temp_dir.path }}/server64_8_3_{{ platform_version | replace('.', '_') }}.zip"
+  register: file_check
+  changed_when: false
+
+- name: Вывод информации о формате файла
+  debug:
+    var: file_check.stdout
+
+- name: Проверка что файл не является HTML
+  fail:
+    msg: "Скачанный файл является HTML, а не архивом. Проверьте учетные данные для 1C ИТС."
+  when: "'HTML' in file_check.stdout"
+
+- name: Распаковка дистрибутива Platform
+  unarchive:
+    src: "{{ platform_temp_dir.path }}/server64_8_3_{{ platform_version | replace('.', '_') }}.zip"
+    dest: "{{ platform_temp_dir.path }}"
+    remote_src: yes
+
+- name: Поиск установщика Platform
+  find:
+    paths: "{{ platform_temp_dir.path }}"
+    patterns: "setup-full-*.run"
+    file_type: file
+    recurse: yes
+  register: platform_installer_find
+
+- name: Вывод пути к установщику
+  debug:
+    var: platform_installer_find.files
+
+- name: Запуск установщика Platform в автоматическом режиме
+  command:
+    cmd: "./{{ platform_installer_find.files[0].path | basename }} --mode unattended --enable-components server,server_admin,ws,liberica_jre"
+    chdir: "{{ platform_installer_find.files[0].path | dirname }}"
+  args:
+    creates: /opt/1cv8/{{ platform_version }}
+
+- name: Очистка временных файлов
+  file:
+    path: "{{ platform_temp_dir.path }}"
+    state: absent

@@ -1,0 +1,12 @@
+---
+- name: Установка инфраструктуры на локальной машине
+  hosts: local
+  connection: local
+  become: yes
+  roles:
+    - role: common
+    - role: java
+    - role: edt
+    - role: platform
+    - role: sonar-scanner
+    - role: rdp-tools

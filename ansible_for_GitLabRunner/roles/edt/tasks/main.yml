@@ -1,0 +1,96 @@
+---
+- name: Создание временного каталога для загрузки
+  tempfile:
+    state: directory
+    suffix: edt_install
+  register: edt_temp_dir
+
+- name: Получение HTML-страницы с ссылкой на дистрибутив EDT
+  uri:
+    url: "https://releases.1c.ru/version_file?nick=DevelopmentTools10&ver={{ edt_version }}"
+    method: GET
+    user: "{{ releases_login }}"
+    password: "{{ releases_pass }}"
+    force_basic_auth: yes
+    status_code: 200
+    return_content: yes
+    headers:
+      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+    follow_redirects: yes
+  register: edt_page
+  until: edt_page is succeeded
+  retries: 3
+  delay: 10
+
+- name: Сохранение HTML для отладки (при необходимости)
+  copy:
+    content: "{{ edt_page.content }}"
+    dest: "/tmp/edt_page.html"
+  when: false  # Измените на true для отладки
+
+- name: Поиск ссылки для скачивания EDT
+  set_fact:
+    edt_download_url: "{{ edt_page.content | regex_search('https://[^\\\"]+/public/file/get/[^\\\"]+') }}"
+
+- name: Проверка что ссылка найдена
+  fail:
+    msg: "Не удалось найти ссылку для скачивания EDT на странице. Проверьте учетные данные и доступность версии {{ edt_version }}."
+  when: edt_download_url is not defined or edt_download_url == ""
+
+- name: Загрузка дистрибутива 1C:EDT
+  get_url:
+    url: "{{ edt_download_url }}"
+    dest: "{{ edt_temp_dir.path }}/1c_edt_distr_{{ edt_version }}_7_linux_x86_64.tar.gz"
+    url_username: "{{ releases_login }}"
+    url_password: "{{ releases_pass }}"
+    force_basic_auth: yes
+    headers:
+      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+  register: download_edt
+  until: download_edt is succeeded
+  retries: 3
+  delay: 10
+
+- name: Проверка формата скачанного файла
+  command: file "{{ edt_temp_dir.path }}/1c_edt_distr_{{ edt_version }}_7_linux_x86_64.tar.gz"
+  register: file_check
+  changed_when: false
+
+- name: Вывод информации о формате файла
+  debug:
+    var: file_check.stdout
+
+- name: Проверка что файл не является HTML
+  fail:
+    msg: "Скачанный файл является HTML, а не архивом. Проверьте учетные данные для 1C ИТС."
+  when: "'HTML' in file_check.stdout"
+
+- name: Распаковка дистрибутива EDT
+  unarchive:
+    src: "{{ edt_temp_dir.path }}/1c_edt_distr_{{ edt_version }}_7_linux_x86_64.tar.gz"
+    dest: "{{ edt_temp_dir.path }}"
+    remote_src: yes
+
+- name: Поиск установщика EDT
+  find:
+    paths: "{{ edt_temp_dir.path }}"
+    patterns: "1ce-installer-cli"
+    file_type: file
+    recurse: yes
+  register: installer_find
+
+- name: Вывод пути к установщику
+  debug:
+    var: installer_find.files
+
+- name: Запуск установщика EDT
+  command:
+    cmd: "./1ce-installer-cli install --ignore-hardware-checks"
+    chdir: "{{ installer_find.files[0].path | dirname }}"
+  args:
+    creates: /opt/1c/edt/{{ edt_version }}
+
+- name: Очистка временных файлов
+  file:
+    path: "{{ edt_temp_dir.path }}"
+    state: absent

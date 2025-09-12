@@ -1,0 +1,60 @@
+---
+- name: Проверка что пароль root установлен
+  shell: |
+    # Проверяем что у root есть пароль (не заблокирован)
+    sudo passwd -S root | grep -v "L"
+  changed_when: false
+  failed_when: false
+  register: root_password_status
+  tags: rdp
+
+- name: Предупреждение если пароль root не установлен
+  debug:
+    msg: "ВНИМАНИЕ: Пароль root не установлен. RDP доступ не будет работать."
+  when: root_password_status.rc != 0
+  tags: rdp
+
+- name: Разрешение удаленного доступа для root через RDP
+  lineinfile:
+    path: /etc/xrdp/sesman.ini
+    regexp: '^AllowRootLogin='
+    line: 'AllowRootLogin=true'
+    backup: yes
+  tags: rdp
+
+- name: Разрешение консольного доступа для root
+  lineinfile:
+    path: /etc/xrdp/sesman.ini
+    regexp: '^EnableConsole='
+    line: 'EnableConsole=true'
+    backup: yes
+  tags: rdp
+
+- name: Настройка RDP сервиса (порт)
+  lineinfile:
+    path: /etc/xrdp/xrdp.ini
+    regexp: '^port='
+    line: 'port={{ rdp_port }}'
+    backup: yes
+  tags: rdp
+
+- name: Перезапуск службы xrdp для применения изменений
+  systemd:
+    name: xrdp
+    state: restarted
+    enabled: yes
+  tags: rdp
+
+- name: Проверка статуса службы xrdp
+  systemd:
+    name: xrdp
+    state: started
+  tags: rdp
+
+- name: Проверка доступности RDP порта
+  wait_for:
+    host: localhost
+    port: "{{ rdp_port }}"
+    state: started
+    timeout: 30
+  tags: rdp

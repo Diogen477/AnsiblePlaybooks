@@ -1,0 +1,26 @@
+---
+- name: Загрузка SonarScanner
+  get_url:
+    url: "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip"
+    dest: /opt/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip
+
+- name: Распаковка SonarScanner
+  unarchive:
+    src: /opt/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip
+    dest: /opt
+    remote_src: yes
+    owner: root
+    group: root
+
+- name: Создание символьной ссылки для SonarScanner
+  file:
+    src: /opt/sonar-scanner-{{ sonar_scanner_version }}-linux
+    dest: /opt/sonar-scanner
+    state: link
+
+- name: Добавление SonarScanner в PATH
+  lineinfile:
+    path: /etc/environment
+    regexp: '^PATH='
+    line: 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/sonar-scanner/bin"'
+    state: present
