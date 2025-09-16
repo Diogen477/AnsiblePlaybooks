@@ -1,0 +1,9 @@
+---
+- name: Install SonarQube with Community Branch Plugin
+  hosts: sonarqube_servers
+  become: yes
+  roles:
+    - common
+    - postgresql
+    - sonarqube
+    - branch_plugin

@@ -1,0 +1,10 @@
+---
+sonarqube_version: "25.8.0.112029"
+sonarqube_dir: "/opt/sonarqube"
+plugin_version: "25.8.0"
+db_name: "sonarqube"
+db_user: "sonar"
+db_password: "StrongPassword123"  # Замените на надежный пароль
+postgresql_version: "16"
+sonarqube_user: "sonarqube"
+sonarqube_group: "sonarqube"

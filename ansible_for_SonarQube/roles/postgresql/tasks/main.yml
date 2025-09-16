@@ -1,0 +1,61 @@
+---
+- name: Install PostgreSQL
+  apt:
+    name:
+      - postgresql
+      - postgresql-contrib
+    state: present
+
+- name: Ensure PostgreSQL is running
+  systemd:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Create SonarQube database
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ db_name }}"
+    encoding: UTF8
+    template: template0
+
+- name: Create SonarQube database user
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    role_attr_flags: CREATEDB
+    db: "{{ db_name }}"
+
+- name: Grant database privileges to sonar user
+  become_user: postgres
+  community.postgresql.postgresql_privs:
+    database: "{{ db_name }}"
+    role: "{{ db_user }}"
+    privs: ALL
+    type: database
+
+- name: Grant schema privileges to sonar user
+  become_user: postgres
+  community.postgresql.postgresql_privs:
+    database: "{{ db_name }}"
+    role: "{{ db_user }}"
+    privs: ALL
+    type: schema
+    objs: public
+
+- name: Configure PostgreSQL authentication
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+    regexp: "^local\\s+all\\s+all\\s+peer"
+    line: "local all all md5"
+    backup: yes
+  notify: Restart PostgreSQL
+
+- name: Configure PostgreSQL to listen on all addresses
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: "^#?listen_addresses\\s*="
+    line: "listen_addresses = '*'"
+    backup: yes
+  notify: Restart PostgreSQL

@@ -1,0 +1,95 @@
+---
+- name: Create sonarqube group
+  group:
+    name: "{{ sonarqube_group }}"
+    state: present
+
+- name: Create sonarqube user
+  user:
+    name: "{{ sonarqube_user }}"
+    group: "{{ sonarqube_group }}"
+    comment: SonarQube Service User
+    home: "{{ sonarqube_dir }}"
+    shell: /bin/bash
+    system: yes
+
+- name: Download SonarQube
+  unarchive:
+    src: "https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-{{ sonarqube_version }}.zip"
+    dest: /opt
+    remote_src: yes
+    owner: "{{ sonarqube_user }}"
+    group: "{{ sonarqube_group }}"
+    mode: 0755
+
+- name: Remove existing SonarQube directory (if exists)
+  file:
+    path: "{{ sonarqube_dir }}"
+    state: absent
+  ignore_errors: yes
+
+- name: Create SonarQube directory symlink
+  file:
+    src: "/opt/sonarqube-{{ sonarqube_version }}"
+    dest: "{{ sonarqube_dir }}"
+    state: link
+    owner: "{{ sonarqube_user }}"
+    group: "{{ sonarqube_group }}"
+
+- name: Ensure correct permissions on SonarQube directories
+  file:
+    path: "{{ item }}"
+    owner: "{{ sonarqube_user }}"
+    group: "{{ sonarqube_group }}"
+    mode: 0755
+    recurse: yes
+  with_items:
+    - "{{ sonarqube_dir }}/logs"
+    - "{{ sonarqube_dir }}/temp"
+    - "{{ sonarqube_dir }}/data"
+    - "{{ sonarqube_dir }}/extensions"
+
+- name: Configure SonarQube database settings
+  lineinfile:
+    path: "{{ sonarqube_dir }}/conf/sonar.properties"
+    regexp: "^{{ item.regex }}"
+    line: "{{ item.line }}"
+    backup: yes
+  with_items:
+    - { regex: "^#sonar.jdbc.username=", line: "sonar.jdbc.username={{ db_user }}" }
+    - { regex: "^#sonar.jdbc.password=", line: "sonar.jdbc.password={{ db_password }}" }
+    - { regex: "^#sonar.jdbc.url=", line: "sonar.jdbc.url=jdbc:postgresql://localhost/{{ db_name }}" }
+
+- name: Create systemd service for SonarQube
+  copy:
+    content: |
+      [Unit]
+      Description=SonarQube service
+      After=syslog.target network.target postgresql.service
+
+      [Service]
+      Type=forking
+      ExecStart={{ sonarqube_dir }}/bin/linux-x86-64/sonar.sh start
+      ExecStop={{ sonarqube_dir }}/bin/linux-x86-64/sonar.sh stop
+      User={{ sonarqube_user }}
+      Group={{ sonarqube_group }}
+      Restart=on-failure
+      RestartSec=5
+      LimitNOFILE=65536
+      LimitNPROC=4096
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/sonarqube.service
+    mode: 0644
+
+- name: Reset failed service status
+  command: systemctl reset-failed sonarqube
+  ignore_errors: yes
+
+- name: Enable and start SonarQube service
+  systemd:
+    name: sonarqube
+    state: started
+    enabled: yes
+    daemon_reload: yes
