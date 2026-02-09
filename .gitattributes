@@ -1,0 +1,23 @@
+* text=auto
+
+*.yml text eol=lf
+*.yaml text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+
+*.py text eol=lf
+
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+*.tar.gz binary
+*.zip binary
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

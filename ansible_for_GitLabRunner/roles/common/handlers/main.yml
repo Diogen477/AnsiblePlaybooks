@@ -1,0 +1,6 @@
+---
+- name: check xrdp status
+  command: systemctl is-active xrdp
+  register: xrdp_status
+  changed_when: false
+  failed_when: false
