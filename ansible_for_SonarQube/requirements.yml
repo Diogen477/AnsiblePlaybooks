@@ -1,0 +1,13 @@
+---
+# Обязательные коллекции для SonarQube playbook
+collections:
+  - name: community.postgresql
+    version: ">=3.0.0"
+    source: https://galaxy.ansible.com
+  
+  - name: community.general
+    version: ">=5.0.0"
+    source: https://galaxy.ansible.com
+
+# Установка коллекций:
+# ansible-galaxy collection install -r requirements.yml

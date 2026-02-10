@@ -4,10 +4,11 @@
     update_cache: yes
     cache_valid_time: 3600
 
-- name: Обновление системы
+- name: Безопасное обновление системы
   apt:
-    upgrade: dist
+    upgrade: safe
     cache_valid_time: 3600
+  tags: [never, system_update]
 
 - name: Установка базовых пакетов
   apt:
@@ -19,6 +20,8 @@
       - curl
       - wget
       - software-properties-common
+      - ca-certificates
+      - gnupg
     state: present
 
 - name: Установка графической оболочки и RDP

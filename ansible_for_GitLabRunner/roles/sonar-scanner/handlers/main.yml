@@ -1,0 +1,4 @@
+---
+- name: reload environment
+  debug:
+    msg: "Environment variables updated. Users need to re-login or source /etc/profile.d/sonar-scanner.sh"

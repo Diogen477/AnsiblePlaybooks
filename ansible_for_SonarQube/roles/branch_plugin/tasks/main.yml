@@ -1,32 +1,116 @@
 ---
+# Шаг 1: Копирование JAR-файла плагина в extensions/plugins/
 - name: Create plugins directory if it doesn't exist
   file:
     path: "{{ sonarqube_dir }}/extensions/plugins"
     state: directory
-    mode: 0755
+    mode: '0755'
     owner: "{{ sonarqube_user }}"
     group: "{{ sonarqube_group }}"
 
 - name: Download community branch plugin
   get_url:
     url: "https://github.com/mc1arke/sonarqube-community-branch-plugin/releases/download/{{ plugin_version }}/sonarqube-community-branch-plugin-{{ plugin_version }}.jar"
-    dest: "{{ sonarqube_dir }}/extensions/plugins/"
-    mode: 0644
+    dest: "{{ sonarqube_dir }}/extensions/plugins/sonarqube-community-branch-plugin-{{ plugin_version }}.jar"
+    mode: '0644'
     owner: "{{ sonarqube_user }}"
     group: "{{ sonarqube_group }}"
+  notify: Restart SonarQube
 
+# Шаг 2: Настройка javaagent для web
 - name: Configure Java agent for web component
   lineinfile:
     path: "{{ sonarqube_dir }}/conf/sonar.properties"
     regexp: "^#?sonar.web.javaAdditionalOpts="
-    line: "sonar.web.javaAdditionalOpts=-javaagent:{{ sonarqube_dir }}/extensions/plugins/sonarqube-community-branch-plugin-{{ plugin_version }}.jar=web"
+    line: "sonar.web.javaAdditionalOpts=-javaagent:./extensions/plugins/sonarqube-community-branch-plugin-{{ plugin_version }}.jar=web"
     backup: yes
   notify: Restart SonarQube
 
+# Шаг 3: Настройка javaagent для compute engine
 - name: Configure Java agent for compute engine
   lineinfile:
     path: "{{ sonarqube_dir }}/conf/sonar.properties"
     regexp: "^#?sonar.ce.javaAdditionalOpts="
-    line: "sonar.ce.javaAdditionalOpts=-javaagent:{{ sonarqube_dir }}/extensions/plugins/sonarqube-community-branch-plugin-{{ plugin_version }}.jar=ce"
+    line: "sonar.ce.javaAdditionalOpts=-javaagent:./extensions/plugins/sonarqube-community-branch-plugin-{{ plugin_version }}.jar=ce"
     backup: yes
   notify: Restart SonarQube
+
+# Шаг 4: Замена содержимого директории web на sonarqube-webapp
+- name: Остановка SonarQube перед заменой webapp
+  systemd:
+    name: sonarqube
+    state: stopped
+  ignore_errors: yes
+
+- name: Создание временной директории для webapp
+  tempfile:
+    state: directory
+    suffix: sonarqube_webapp
+  register: webapp_temp_dir
+
+- name: Скачивание sonarqube-webapp архива
+  get_url:
+    url: "{{ webapp_archive_url }}"
+    dest: "{{ webapp_temp_dir.path }}/sonarqube-webapp.zip"
+    mode: '0644'
+    timeout: 120
+  register: webapp_download
+  until: webapp_download is succeeded
+  retries: 3
+  delay: 10
+
+- name: Создание бэкапа текущей директории web
+  command:
+    cmd: "cp -a {{ sonarqube_dir }}/web {{ sonarqube_dir }}/web.backup.{{ ansible_date_time.iso8601_basic_short }}"
+  args:
+    creates: "{{ sonarqube_dir }}/web.backup.{{ ansible_date_time.iso8601_basic_short }}"
+  ignore_errors: yes
+
+- name: Очистка текущей директории web
+  file:
+    path: "{{ sonarqube_dir }}/web"
+    state: absent
+
+- name: Создание директории web
+  file:
+    path: "{{ sonarqube_dir }}/web"
+    state: directory
+    owner: "{{ sonarqube_user }}"
+    group: "{{ sonarqube_group }}"
+    mode: '0755'
+
+- name: Распаковка sonarqube-webapp в директорию web
+  unarchive:
+    src: "{{ webapp_temp_dir.path }}/sonarqube-webapp.zip"
+    dest: "{{ sonarqube_dir }}/web"
+    remote_src: yes
+    owner: "{{ sonarqube_user }}"
+    group: "{{ sonarqube_group }}"
+
+- name: Установка правильных прав на директорию web
+  file:
+    path: "{{ sonarqube_dir }}/web"
+    owner: "{{ sonarqube_user }}"
+    group: "{{ sonarqube_group }}"
+    recurse: yes
+
+- name: Очистка временных файлов webapp
+  file:
+    path: "{{ webapp_temp_dir.path }}"
+    state: absent
+
+# Шаг 5: Запуск SonarQube
+- name: Запуск SonarQube после установки плагина
+  systemd:
+    name: sonarqube
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Ожидание запуска SonarQube (до 120 секунд)
+  wait_for:
+    host: localhost
+    port: 9000
+    state: started
+    timeout: 120
+  ignore_errors: yes

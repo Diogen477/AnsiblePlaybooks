@@ -1,0 +1,4 @@
+---
+# Настройки пользователя GitLab Runner по умолчанию
+gitlab_runner_sudo_nopasswd: false  # Требовать пароль для sudo (безопаснее)
+# gitlab_runner_ssh_key: ""  # SSH ключ для доступа (опционально)
