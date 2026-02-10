@@ -1,96 +1,94 @@
 ---
-- name: Создание временного каталога для загрузки
-  tempfile:
-    state: directory
-    suffix: edt_install
-  register: edt_temp_dir
+- name: Проверка наличия установленного EDT
+  stat:
+    path: "{{ edt_install_path }}/{{ edt_version }}"
+  register: edt_installed
 
-- name: Получение HTML-страницы с ссылкой на дистрибутив EDT
-  uri:
-    url: "https://releases.1c.ru/version_file?nick=DevelopmentTools10&ver={{ edt_version }}"
-    method: GET
-    user: "{{ releases_login }}"
-    password: "{{ releases_pass }}"
-    force_basic_auth: yes
-    status_code: 200
-    return_content: yes
-    headers:
-      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-    follow_redirects: yes
-  register: edt_page
-  until: edt_page is succeeded
-  retries: 3
-  delay: 10
+- name: Установка EDT из локального дистрибутива
+  when: not edt_installed.stat.exists
+  block:
+    - name: Проверка существования директории с установщиками EDT
+      stat:
+        path: "{{ edt_installers_dir }}"
+      register: edt_dir_check
 
-- name: Сохранение HTML для отладки (при необходимости)
-  copy:
-    content: "{{ edt_page.content }}"
-    dest: "/tmp/edt_page.html"
-  when: false  # Измените на true для отладки
+    - name: Ошибка если директория не найдена
+      fail:
+        msg: |
+          Директория с установщиками EDT не найдена: {{ edt_installers_dir }}
+          
+          Создайте директорию и разместите в ней дистрибутив EDT:
+            sudo mkdir -p {{ edt_installers_dir }}
+          
+          Скачайте дистрибутив с https://releases.1c.ru/project/DevelopmentTools10
+          и поместите файл 1c_edt_distr_{{ edt_version }}_*_linux_x86_64.tar.gz
+          в директорию {{ edt_installers_dir }}
+      when: not edt_dir_check.stat.exists
 
-- name: Поиск ссылки для скачивания EDT
-  set_fact:
-    edt_download_url: "{{ edt_page.content | regex_search('https://[^\\\"]+/public/file/get/[^\\\"]+') }}"
+    - name: Поиск архива дистрибутива EDT
+      find:
+        paths: "{{ edt_installers_dir }}"
+        patterns:
+          - "1c_edt_distr_{{ edt_version }}*linux_x86_64.tar.gz"
+          - "1c_edt_distr_{{ edt_version }}*.tar.gz"
+          - "1c_edt_*{{ edt_version }}*.tar.gz"
+        file_type: file
+      register: edt_archive_find
 
-- name: Проверка что ссылка найдена
-  fail:
-    msg: "Не удалось найти ссылку для скачивания EDT на странице. Проверьте учетные данные и доступность версии {{ edt_version }}."
-  when: edt_download_url is not defined or edt_download_url == ""
+    - name: Ошибка если дистрибутив не найден
+      fail:
+        msg: |
+          Дистрибутив EDT версии {{ edt_version }} не найден в {{ edt_installers_dir }}
+          
+          Скачайте файл с https://releases.1c.ru/project/DevelopmentTools10
+          и поместите его в {{ edt_installers_dir }}
+          
+          Ожидаемое имя файла: 1c_edt_distr_{{ edt_version }}_*_linux_x86_64.tar.gz
+          
+          Содержимое директории:
+          {{ edt_dir_check.stat.exists | ternary('(директория существует, но файл не найден)', '(директория не существует)') }}
+      when: edt_archive_find.files | length == 0
 
-- name: Загрузка дистрибутива 1C:EDT
-  get_url:
-    url: "{{ edt_download_url }}"
-    dest: "{{ edt_temp_dir.path }}/1c_edt_distr_{{ edt_version }}_7_linux_x86_64.tar.gz"
-    url_username: "{{ releases_login }}"
-    url_password: "{{ releases_pass }}"
-    force_basic_auth: yes
-    headers:
-      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-  register: download_edt
-  until: download_edt is succeeded
-  retries: 3
-  delay: 10
+    - name: Создание временного каталога
+      tempfile:
+        state: directory
+        suffix: edt_install
+      register: edt_temp_dir
 
-- name: Проверка формата скачанного файла
-  command: file "{{ edt_temp_dir.path }}/1c_edt_distr_{{ edt_version }}_7_linux_x86_64.tar.gz"
-  register: file_check
-  changed_when: false
+    - name: Распаковка дистрибутива EDT
+      unarchive:
+        src: "{{ edt_archive_find.files[0].path }}"
+        dest: "{{ edt_temp_dir.path }}"
+        remote_src: yes
 
-- name: Вывод информации о формате файла
+    - name: Поиск установщика EDT
+      find:
+        paths: "{{ edt_temp_dir.path }}"
+        patterns: "1ce-installer-cli"
+        file_type: file
+        recurse: yes
+      register: installer_find
+
+    - name: Ошибка если установщик не найден в архиве
+      fail:
+        msg: "Установщик 1ce-installer-cli не найден в распакованном архиве"
+      when: installer_find.files | length == 0
+
+    - name: Запуск установщика EDT
+      command:
+        cmd: "./1ce-installer-cli install --ignore-hardware-checks"
+        chdir: "{{ installer_find.files[0].path | dirname }}"
+      args:
+        creates: "{{ edt_install_path }}/{{ edt_version }}"
+
+  always:
+    - name: Очистка временных файлов
+      file:
+        path: "{{ edt_temp_dir.path }}"
+        state: absent
+      when: edt_temp_dir is defined and edt_temp_dir.path is defined
+
+- name: Информация об установке EDT
   debug:
-    var: file_check.stdout
-
-- name: Проверка что файл не является HTML
-  fail:
-    msg: "Скачанный файл является HTML, а не архивом. Проверьте учетные данные для 1C ИТС."
-  when: "'HTML' in file_check.stdout"
-
-- name: Распаковка дистрибутива EDT
-  unarchive:
-    src: "{{ edt_temp_dir.path }}/1c_edt_distr_{{ edt_version }}_7_linux_x86_64.tar.gz"
-    dest: "{{ edt_temp_dir.path }}"
-    remote_src: yes
-
-- name: Поиск установщика EDT
-  find:
-    paths: "{{ edt_temp_dir.path }}"
-    patterns: "1ce-installer-cli"
-    file_type: file
-    recurse: yes
-  register: installer_find
-
-- name: Вывод пути к установщику
-  debug:
-    var: installer_find.files
-
-- name: Запуск установщика EDT
-  command:
-    cmd: "./1ce-installer-cli install --ignore-hardware-checks"
-    chdir: "{{ installer_find.files[0].path | dirname }}"
-  args:
-    creates: /opt/1c/edt/{{ edt_version }}
-
-- name: Очистка временных файлов
-  file:
-    path: "{{ edt_temp_dir.path }}"
-    state: absent
+    msg: "1C:EDT {{ edt_version }} установлен в {{ edt_install_path }}/{{ edt_version }}"
+  when: edt_installed.stat.exists
