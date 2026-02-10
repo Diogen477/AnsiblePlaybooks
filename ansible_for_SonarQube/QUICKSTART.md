@@ -3,8 +3,8 @@
 ## За 5 минут к запуску
 
 ### 1. Установите Ansible
+
 ```bash
-# Ubuntu/Debian
 sudo apt update
 sudo apt install ansible
 
@@ -13,205 +13,148 @@ ansible --version
 ```
 
 ### 2. Клонируйте проект
+
 ```bash
 git clone https://github.com/Diogen477/AnsiblePlaybooks.git
 cd AnsiblePlaybooks/ansible_for_SonarQube
 ```
 
 ### 3. Установите зависимости
+
 ```bash
 ansible-galaxy collection install -r requirements.yml
 ```
 
-### 4. Настройте пароль БД
+### 4. Задайте пароль БД
+
 ```bash
-# Создайте vault файл
+# Вариант 1: Напрямую (для тестовых сред)
+nano group_vars/all.yml    # Измените db_password
+
+# Вариант 2: Через Ansible Vault (для production)
 cp group_vars/vault.yml.example group_vars/vault.yml
-
-# Отредактируйте - ОБЯЗАТЕЛЬНО смените пароль!
-nano group_vars/vault.yml
-
-# Зашифруйте
+nano group_vars/vault.yml  # Задайте vault_db_password
 ansible-vault encrypt group_vars/vault.yml
-# Введите пароль для vault (запомните!)
+# В all.yml замените: db_password: "{{ vault_db_password }}"
 ```
 
 ### 5. (Опционально) Настройте версии
+
 ```bash
 nano group_vars/all.yml
 
-# Измените при необходимости:
+# При необходимости измените:
 # sonarqube_version: "25.8.0.112029"
+# plugin_version: "25.8.0"
 # postgresql_version: "16"
 ```
 
 ### 6. Запустите установку
+
 ```bash
+# Без vault
+ansible-playbook sonarqube.yml
+
+# С vault
 ansible-playbook sonarqube.yml --ask-vault-pass
 ```
 
 ### 7. Откройте в браузере
+
 ```
 http://localhost:9000
 ```
 
-**Логин:** admin  
-**Пароль:** admin
+**Логин:** admin / **Пароль:** admin
 
-### 8. ⚠️ ВАЖНО: Смените пароль!
-При первом входе SonarQube попросит сменить пароль.
+### 8. Смените пароль!
 
-## Готово! 🎉
+При первом входе SonarQube потребует сменить пароль администратора.
 
----
+## Готово!
 
-## Полезные команды
-
-### Просмотр vault файла
-```bash
-ansible-vault view group_vars/vault.yml
-```
-
-### Редактирование vault
-```bash
-ansible-vault edit group_vars/vault.yml
-```
-
-### Проверка синтаксиса
-```bash
-ansible-playbook sonarqube.yml --syntax-check
-```
-
-### Dry-run
-```bash
-ansible-playbook sonarqube.yml --check --ask-vault-pass
-```
-
-### Проверка служб
-```bash
-# SonarQube
-sudo systemctl status sonarqube
-
-# PostgreSQL
-sudo systemctl status postgresql
-
-# Логи
-sudo journalctl -u sonarqube -f
-```
+Установлены:
+- PostgreSQL 16
+- SonarQube 25.8
+- OpenJDK 17
+- Community Branch Plugin (с заменой webapp)
 
 ---
 
 ## Выборочная установка
 
-### Только база данных
 ```bash
-ansible-playbook sonarqube.yml --ask-vault-pass --tags database
-```
+# Только база данных
+ansible-playbook sonarqube.yml --tags database
 
-### Без Community Branch Plugin
-```bash
-ansible-playbook sonarqube.yml --ask-vault-pass --skip-tags plugin
-```
+# Без Community Branch Plugin
+ansible-playbook sonarqube.yml --skip-tags plugin
 
-### Только SonarQube (БД уже установлена)
-```bash
-ansible-playbook sonarqube.yml --ask-vault-pass --tags sonarqube
+# Только SonarQube (БД уже есть)
+ansible-playbook sonarqube.yml --tags sonarqube
 ```
 
 ---
 
-## Troubleshooting
+## Решение проблем
 
 ### SonarQube не запускается
+
 ```bash
-# Проверьте логи
 sudo journalctl -u sonarqube -n 50
-
-# Проверьте статус
 sudo systemctl status sonarqube
-
-# Перезапустите
 sudo systemctl restart sonarqube
 ```
 
-### Забыли пароль vault
-```bash
-# Расшифруйте
-ansible-vault decrypt group_vars/vault.yml
-
-# Отредактируйте
-nano group_vars/vault.yml
-
-# Зашифруйте снова
-ansible-vault encrypt group_vars/vault.yml
-```
-
 ### Не подключается к БД
+
 ```bash
-# Проверьте PostgreSQL
 sudo systemctl status postgresql
-
-# Проверьте подключение
 sudo -u postgres psql -d sonarqube -c "\dt"
-
-# Проверьте пароль в конфигурации
 sudo cat /opt/sonarqube/conf/sonar.properties | grep jdbc
 ```
 
-### Нужно больше памяти
+### Проверка служб
+
 ```bash
-# Отредактируйте all.yml
-nano group_vars/all.yml
-
-# Увеличьте JVM параметры:
-# sonarqube_web_java_opts: "-Xmx2048m -Xms512m"
-# sonarqube_ce_java_opts: "-Xmx2048m -Xms512m"
-
-# Перезапустите
-ansible-playbook sonarqube.yml --ask-vault-pass --tags sonarqube
+sudo systemctl status sonarqube
+sudo systemctl status postgresql
+sudo journalctl -u sonarqube -f
 ```
 
 ---
 
-## Следующие шаги
-
-1. **Создайте проект** в SonarQube UI
-2. **Сгенерируйте токен** для CI/CD
-3. **Настройте анализатор** в вашем проекте:
+## Полезные команды
 
 ```bash
-# Пример для GitLab CI
-sonar-scanner \
-  -Dsonar.projectKey=my-project \
-  -Dsonar.sources=. \
-  -Dsonar.host.url=http://sonarqube.example.com:9000 \
-  -Dsonar.login=$SONAR_TOKEN
-```
+# Проверка синтаксиса
+ansible-playbook sonarqube.yml --syntax-check
 
-4. **Настройте Quality Gate**
-5. **Интегрируйте с CI/CD**
+# Dry-run
+ansible-playbook sonarqube.yml --check
 
----
+# Просмотр vault
+ansible-vault view group_vars/vault.yml
 
-## Безопасность
-
-### После установки обязательно:
-```bash
-# 1. Смените пароль admin в SonarQube
-
-# 2. Настройте firewall
-sudo ufw allow 9000/tcp
-sudo ufw enable
-
-# 3. (Опционально) Настройте SSL через nginx
+# Редактирование vault
+ansible-vault edit group_vars/vault.yml
 ```
 
 ---
 
-## Дополнительная информация
+## Дальнейшие шаги
 
-- **README.md** - Полная документация
-- **CHANGES.md** - Список всех изменений
-- Создайте Issue на GitHub если нашли проблему
+1. Создайте проект в SonarQube UI
+2. Сгенерируйте токен: **My Account → Security → Generate Tokens**
+3. Настройте анализ в CI/CD:
+   ```bash
+   sonar-scanner \
+     -Dsonar.projectKey=my-project \
+     -Dsonar.sources=. \
+     -Dsonar.host.url=http://sonarqube.example.com:9000 \
+     -Dsonar.token=$SONAR_TOKEN
+   ```
+4. Настройте Quality Gate
+5. Настройте firewall: `sudo ufw allow 9000/tcp`
 
-**Успешной работы с SonarQube!** 🚀
+Подробная документация — в [README.md](README.md).
