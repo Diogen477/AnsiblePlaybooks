@@ -13,6 +13,11 @@
     shell: /bin/bash
     system: yes
 
+- name: Check if SonarQube is already downloaded
+  stat:
+    path: "/opt/sonarqube-{{ sonarqube_version }}"
+  register: sonarqube_downloaded
+
 - name: Download SonarQube
   unarchive:
     src: "https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-{{ sonarqube_version }}.zip"
@@ -21,6 +26,7 @@
     owner: "{{ sonarqube_user }}"
     group: "{{ sonarqube_group }}"
     mode: 0755
+  when: not sonarqube_downloaded.stat.exists
 
 - name: Remove existing SonarQube directory (if exists)
   file:
@@ -52,13 +58,13 @@
 - name: Configure SonarQube database settings
   lineinfile:
     path: "{{ sonarqube_dir }}/conf/sonar.properties"
-    regexp: "^{{ item.regex }}"
+    regexp: "{{ item.regex }}"
     line: "{{ item.line }}"
     backup: yes
   with_items:
-    - { regex: "^#sonar.jdbc.username=", line: "sonar.jdbc.username={{ db_user }}" }
-    - { regex: "^#sonar.jdbc.password=", line: "sonar.jdbc.password={{ db_password }}" }
-    - { regex: "^#sonar.jdbc.url=", line: "sonar.jdbc.url=jdbc:postgresql://localhost/{{ db_name }}" }
+    - { regex: "^#?sonar.jdbc.username=", line: "sonar.jdbc.username={{ db_user }}" }
+    - { regex: "^#?sonar.jdbc.password=", line: "sonar.jdbc.password={{ db_password }}" }
+    - { regex: "^#?sonar.jdbc.url=", line: "sonar.jdbc.url=jdbc:postgresql://localhost/{{ db_name }}" }
 
 - name: Create systemd service for SonarQube
   copy:

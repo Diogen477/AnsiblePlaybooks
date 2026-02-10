@@ -1,11 +1,45 @@
-# Учётные данные для портала 1С (общие для EDT и Platform)
-releases_login: "releases_login"
-releases_pass: "releases_pass"
-
+---
+# =============================================================================
 # Версии продуктов
+# =============================================================================
 edt_version: "2024.2.6"
 platform_version: "8.3.25.1633"
 sonar_scanner_version: "5.0.1.3006"
 
+# =============================================================================
+# Пути к локальным установщикам
+# =============================================================================
+# Плейбук ищет установщики в указанных директориях.
+# Перед запуском разместите файлы дистрибутивов в этих папках.
+#
+# EDT: скачайте с https://releases.1c.ru/project/DevelopmentTools10
+#   Ожидаемый файл: 1c_edt_distr_<version>_*_linux_x86_64.tar.gz
+#
+# Platform: скачайте с https://releases.1c.ru/project/Platform83
+#   Ожидаемый файл: *.run или *.tar.gz с установщиком платформы
+#
+installers_base_dir: "/opt/installers"
+edt_installers_dir: "{{ installers_base_dir }}/edt"
+platform_installers_dir: "{{ installers_base_dir }}/platform"
+
+# =============================================================================
+# Пути установки
+# =============================================================================
+edt_install_path: "/opt/1c/edt"
+platform_install_path: "/opt/1cv8"
+sonar_scanner_path: "/opt/sonar-scanner"
+java_home: "/usr/lib/jvm/zulu17"
+
+# =============================================================================
+# Настройки пользователя GitLab Runner
+# =============================================================================
+gitlab_runner_user: "gitlab-runner"
+gitlab_runner_group: "gitlab-runner"
+gitlab_runner_home: "/home/gitlab-runner"
+gitlab_runner_shell: "/bin/bash"
+
+# =============================================================================
 # Настройки RDP
+# =============================================================================
 rdp_port: 3389
+rdp_allow_root: false

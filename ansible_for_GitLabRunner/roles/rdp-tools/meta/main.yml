@@ -1,0 +1,30 @@
+---
+galaxy_info:
+  author: Diogen477
+  description: Настройка xRDP для удаленного доступа
+  company: 
+  
+  license: MIT
+  
+  min_ansible_version: "2.12"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - rdp
+    - xrdp
+    - remote
+    - desktop
+    - access
+
+dependencies:
+  - role: common

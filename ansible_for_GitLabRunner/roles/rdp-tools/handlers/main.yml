@@ -1,0 +1,13 @@
+---
+- name: restart xrdp
+  systemd:
+    name: xrdp
+    state: restarted
+    enabled: yes
+  listen: restart xrdp
+
+- name: reload xrdp
+  systemd:
+    name: xrdp
+    state: reloaded
+  listen: reload xrdp

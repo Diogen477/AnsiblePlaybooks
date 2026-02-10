@@ -1,0 +1,6 @@
+---
+- name: verify java installation
+  command: java -version
+  register: java_verify
+  changed_when: false
+  failed_when: false

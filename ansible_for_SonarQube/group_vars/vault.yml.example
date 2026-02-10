@@ -1,0 +1,30 @@
+# ============================================================
+# КОНФИДЕНЦИАЛЬНЫЕ ПЕРЕМЕННЫЕ SONARQUBE
+# ============================================================
+# ВАЖНО: Этот файл должен быть зашифрован с помощью ansible-vault!
+# 
+# Инструкции:
+# 1. Скопируйте этот файл: cp vault.yml.example vault.yml
+# 2. Заполните реальные данные в vault.yml
+# 3. Зашифруйте: ansible-vault encrypt vault.yml
+# 4. Добавьте vault.yml в .gitignore
+# 
+# Использование:
+# ansible-playbook sonarqube.yml --ask-vault-pass
+# ИЛИ
+# ansible-playbook sonarqube.yml --vault-password-file .vault_pass
+# ============================================================
+
+# Пароль для пользователя PostgreSQL (sonar)
+# ВАЖНО: Используйте сильный пароль!
+# Минимум 16 символов, включая буквы, цифры и спецсимволы
+vault_db_password: "CHANGE_ME_TO_STRONG_PASSWORD_HERE"
+
+# Примеры сильных паролей (сгенерируйте свой!):
+# vault_db_password: "Kj8#mP2$qR5@nL9&wX7*vB4^"
+# vault_db_password: "S0n@rQub3!Str0ng#P@ssw0rd"
+
+# Дополнительные секреты (при необходимости)
+# vault_sonarqube_admin_password: "admin"  # Смените после установки!
+# vault_gitlab_token: "your_gitlab_token"
+# vault_github_token: "your_github_token"
