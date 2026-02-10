@@ -1,0 +1,16 @@
+*.retry
+.vault_pass
+vault.yml
+group_vars/vault.yml
+*.tmp
+*.log
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+__pycache__/
+*.py[cod]
+venv/
+.molecule/
+.cache/

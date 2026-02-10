@@ -1,10 +1,44 @@
 ---
+# =============================================================================
+# Версии компонентов
+# =============================================================================
 sonarqube_version: "25.8.0.112029"
-sonarqube_dir: "/opt/sonarqube"
 plugin_version: "25.8.0"
-db_name: "sonarqube"
-db_user: "sonar"
-db_password: "StrongPassword123"  # Замените на надежный пароль
 postgresql_version: "16"
+
+# =============================================================================
+# Настройки SonarQube
+# =============================================================================
+sonarqube_dir: "/opt/sonarqube"
 sonarqube_user: "sonarqube"
 sonarqube_group: "sonarqube"
+
+# =============================================================================
+# Настройки базы данных
+# =============================================================================
+db_name: "sonarqube"
+db_user: "sonar"
+db_host: "localhost"
+db_port: 5432
+
+# Пароль БД — ОБЯЗАТЕЛЬНО задайте надёжный пароль!
+# Рекомендуется использовать Ansible Vault:
+#   1. cp group_vars/vault.yml.example group_vars/vault.yml
+#   2. Задайте vault_db_password в vault.yml
+#   3. ansible-vault encrypt group_vars/vault.yml
+#   4. Раскомментируйте строку ниже и закомментируйте db_password
+#
+# db_password: "{{ vault_db_password }}"
+db_password: "StrongPassword123"
+
+# =============================================================================
+# Community Branch Plugin — замена webapp
+# =============================================================================
+# URL для скачивания sonarqube-webapp архива
+# Оставьте пустым чтобы пропустить замену webapp
+webapp_archive_url: "https://github.com/mc1arke/sonarqube-community-branch-plugin/releases/download/{{ plugin_version }}/sonarqube-webapp.zip"
+
+# =============================================================================
+# Опции
+# =============================================================================
+enable_branch_plugin: true

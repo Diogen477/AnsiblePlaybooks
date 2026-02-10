@@ -1,26 +1,63 @@
 ---
-- name: Загрузка SonarScanner
-  get_url:
-    url: "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip"
-    dest: /opt/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip
+- name: Проверка наличия установленного SonarScanner
+  stat:
+    path: "{{ sonar_scanner_path }}"
+  register: sonar_installed
 
-- name: Распаковка SonarScanner
-  unarchive:
-    src: /opt/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip
-    dest: /opt
-    remote_src: yes
-    owner: root
-    group: root
+- name: Установка SonarScanner
+  when: not sonar_installed.stat.exists
+  block:
+    - name: Загрузка SonarScanner
+      get_url:
+        url: "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip"
+        dest: /tmp/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip
+        timeout: 300
+      register: download_sonar
+      until: download_sonar is succeeded
+      retries: 3
+      delay: 10
 
-- name: Создание символьной ссылки для SonarScanner
+    - name: Распаковка SonarScanner
+      unarchive:
+        src: /tmp/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip
+        dest: /opt
+        remote_src: yes
+        owner: root
+        group: root
+
+    - name: Создание символьной ссылки для SonarScanner
+      file:
+        src: /opt/sonar-scanner-{{ sonar_scanner_version }}-linux
+        dest: "{{ sonar_scanner_path }}"
+        state: link
+
+  always:
+    - name: Очистка загруженного архива
+      file:
+        path: /tmp/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip
+        state: absent
+
+- name: Добавление SonarScanner в PATH через profile.d
+  copy:
+    dest: /etc/profile.d/sonar-scanner.sh
+    content: |
+      export PATH="$PATH:{{ sonar_scanner_path }}/bin"
+    mode: '0644'
+  notify: reload environment
+
+- name: Создание симлинка sonar-scanner в /usr/local/bin
   file:
-    src: /opt/sonar-scanner-{{ sonar_scanner_version }}-linux
-    dest: /opt/sonar-scanner
+    src: "{{ sonar_scanner_path }}/bin/sonar-scanner"
+    dest: /usr/local/bin/sonar-scanner
     state: link
+    force: yes
 
-- name: Добавление SonarScanner в PATH
-  lineinfile:
-    path: /etc/environment
-    regexp: '^PATH='
-    line: 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/sonar-scanner/bin"'
-    state: present
+- name: Проверка установки SonarScanner
+  command: "{{ sonar_scanner_path }}/bin/sonar-scanner --version"
+  register: sonar_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Вывод версии SonarScanner
+  debug:
+    msg: "SonarScanner {{ sonar_scanner_version }} — {{ sonar_scanner_path }}"

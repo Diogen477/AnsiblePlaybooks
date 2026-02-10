@@ -1,55 +1,41 @@
 ---
-- name: Проверка что пароль root установлен
-  shell: |
-    # Проверяем что у root есть пароль (не заблокирован)
-    sudo passwd -S root | grep -v "L"
-  changed_when: false
-  failed_when: false
-  register: root_password_status
-  tags: rdp
-
-- name: Предупреждение если пароль root не установлен
-  debug:
-    msg: "ВНИМАНИЕ: Пароль root не установлен. RDP доступ не будет работать."
-  when: root_password_status.rc != 0
-  tags: rdp
-
-- name: Разрешение удаленного доступа для root через RDP
+- name: Настройка RDP доступа для root
   lineinfile:
     path: /etc/xrdp/sesman.ini
     regexp: '^AllowRootLogin='
-    line: 'AllowRootLogin=true'
+    line: "AllowRootLogin={{ 'true' if rdp_allow_root else 'false' }}"
     backup: yes
-  tags: rdp
+  notify: restart xrdp
 
-- name: Разрешение консольного доступа для root
-  lineinfile:
-    path: /etc/xrdp/sesman.ini
-    regexp: '^EnableConsole='
-    line: 'EnableConsole=true'
-    backup: yes
-  tags: rdp
+- name: Предупреждение о включенном root RDP
+  debug:
+    msg: "⚠️ ВНИМАНИЕ: Root доступ через RDP включен. Рекомендуется использовать пользователя {{ gitlab_runner_user }}"
+  when: rdp_allow_root
 
-- name: Настройка RDP сервиса (порт)
+- name: Настройка порта RDP
   lineinfile:
     path: /etc/xrdp/xrdp.ini
     regexp: '^port='
     line: 'port={{ rdp_port }}'
     backup: yes
-  tags: rdp
+  notify: restart xrdp
 
-- name: Перезапуск службы xrdp для применения изменений
-  systemd:
-    name: xrdp
-    state: restarted
-    enabled: yes
-  tags: rdp
+- name: Настройка высокого шифрования RDP
+  lineinfile:
+    path: /etc/xrdp/xrdp.ini
+    regexp: '^crypt_level='
+    line: 'crypt_level=high'
+    backup: yes
+  notify: restart xrdp
+
+- name: Применение конфигурации xrdp
+  meta: flush_handlers
 
 - name: Проверка статуса службы xrdp
   systemd:
     name: xrdp
     state: started
-  tags: rdp
+    enabled: yes
 
 - name: Проверка доступности RDP порта
   wait_for:
@@ -57,4 +43,3 @@
     port: "{{ rdp_port }}"
     state: started
     timeout: 30
-  tags: rdp

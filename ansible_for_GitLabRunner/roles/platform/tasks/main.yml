@@ -1,96 +1,124 @@
 ---
-- name: Создание временного каталога для загрузки
-  tempfile:
-    state: directory
-    suffix: platform_install
-  register: platform_temp_dir
+- name: Проверка наличия установленной платформы 1С
+  stat:
+    path: "{{ platform_install_path }}/{{ platform_version }}"
+  register: platform_installed
 
-- name: Получение HTML-страницы с ссылкой на дистрибутив Platform
-  uri:
-    url: "https://releases.1c.ru/version_file?nick=Platform83&ver={{ platform_version }}"
-    method: GET
-    user: "{{ releases_login }}"
-    password: "{{ releases_pass }}"
-    force_basic_auth: yes
-    status_code: 200
-    return_content: yes
-    headers:
-      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-    follow_redirects: yes
-  register: platform_page
-  until: platform_page is succeeded
-  retries: 3
-  delay: 10
+- name: Установка платформы 1С из локального дистрибутива
+  when: not platform_installed.stat.exists
+  block:
+    - name: Проверка существования директории с установщиками платформы
+      stat:
+        path: "{{ platform_installers_dir }}"
+      register: platform_dir_check
 
-- name: Сохранение HTML для отладки (при необходимости)
-  copy:
-    content: "{{ platform_page.content }}"
-    dest: "/tmp/platform_page.html"
-  when: false  # Измените на true для отладки
+    - name: Ошибка если директория не найдена
+      fail:
+        msg: |
+          Директория с установщиками платформы не найдена: {{ platform_installers_dir }}
+          
+          Создайте директорию и разместите в ней дистрибутив:
+            sudo mkdir -p {{ platform_installers_dir }}
+          
+          Скачайте дистрибутив с https://releases.1c.ru/project/Platform83
+          и поместите файл в директорию {{ platform_installers_dir }}
+      when: not platform_dir_check.stat.exists
 
-- name: Поиск ссылки для скачивания Platform
-  set_fact:
-    platform_download_url: "{{ platform_page.content | regex_search('https://[^\\\"]+/public/file/get/[^\\\"]+') }}"
+    - name: Поиск установщика платформы (.run)
+      find:
+        paths: "{{ platform_installers_dir }}"
+        patterns:
+          - "setup-full-{{ platform_version }}*.run"
+          - "setup-full-*.run"
+        file_type: file
+      register: platform_run_find
 
-- name: Проверка что ссылка найдена
-  fail:
-    msg: "Не удалось найти ссылку для скачивания Platform на странице. Проверьте учетные данные и доступность версии {{ platform_version }}."
-  when: platform_download_url is not defined or platform_download_url == ""
+    - name: Поиск архива платформы (.tar.gz или .zip)
+      find:
+        paths: "{{ platform_installers_dir }}"
+        patterns:
+          - "*{{ platform_version }}*.tar.gz"
+          - "*{{ platform_version }}*.zip"
+          - "server64_8_3_*.zip"
+        file_type: file
+      register: platform_archive_find
+      when: platform_run_find.files | length == 0
 
-- name: Загрузка дистрибутива 1C:Platform
-  get_url:
-    url: "{{ platform_download_url }}"
-    dest: "{{ platform_temp_dir.path }}/server64_8_3_{{ platform_version | replace('.', '_') }}.zip"
-    url_username: "{{ releases_login }}"
-    url_password: "{{ releases_pass }}"
-    force_basic_auth: yes
-    headers:
-      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
-  register: download_platform
-  until: download_platform is succeeded
-  retries: 3
-  delay: 10
+    - name: Ошибка если дистрибутив не найден
+      fail:
+        msg: |
+          Дистрибутив платформы 1С версии {{ platform_version }} не найден в {{ platform_installers_dir }}
+          
+          Скачайте файл с https://releases.1c.ru/project/Platform83
+          и поместите его в {{ platform_installers_dir }}
+          
+          Поддерживаемые форматы:
+            - setup-full-{{ platform_version }}*.run (установщик)
+            - *{{ platform_version }}*.tar.gz (архив)
+            - *{{ platform_version }}*.zip (архив)
+      when: >
+        platform_run_find.files | length == 0 and
+        (platform_archive_find.files is not defined or platform_archive_find.files | length == 0)
 
-- name: Проверка формата скачанного файла
-  command: file "{{ platform_temp_dir.path }}/server64_8_3_{{ platform_version | replace('.', '_') }}.zip"
-  register: file_check
-  changed_when: false
+    - name: Создание временного каталога
+      tempfile:
+        state: directory
+        suffix: platform_install
+      register: platform_temp_dir
 
-- name: Вывод информации о формате файла
+    - name: Распаковка архива платформы (tar.gz)
+      unarchive:
+        src: "{{ platform_archive_find.files[0].path }}"
+        dest: "{{ platform_temp_dir.path }}"
+        remote_src: yes
+      when: >
+        platform_run_find.files | length == 0 and
+        platform_archive_find.files | length > 0
+
+    - name: Поиск .run установщика в распакованном архиве
+      find:
+        paths: "{{ platform_temp_dir.path }}"
+        patterns: "setup-full-*.run"
+        file_type: file
+        recurse: yes
+      register: unpacked_installer_find
+      when: platform_run_find.files | length == 0
+
+    - name: Определение пути к установщику
+      set_fact:
+        platform_installer_path: >-
+          {%- if platform_run_find.files | length > 0 -%}
+            {{ platform_run_find.files[0].path }}
+          {%- elif unpacked_installer_find.files is defined and unpacked_installer_find.files | length > 0 -%}
+            {{ unpacked_installer_find.files[0].path }}
+          {%- else -%}
+            NOT_FOUND
+          {%- endif -%}
+
+    - name: Ошибка если установщик не найден
+      fail:
+        msg: "Установщик setup-full-*.run не найден ни в директории, ни в архиве"
+      when: platform_installer_path == "NOT_FOUND"
+
+    - name: Установка прав на выполнение
+      file:
+        path: "{{ platform_installer_path }}"
+        mode: '0755'
+
+    - name: Запуск установщика платформы
+      command:
+        cmd: "{{ platform_installer_path }} --mode unattended --enable-components server,server_admin,ws,liberica_jre"
+      args:
+        creates: "{{ platform_install_path }}/{{ platform_version }}"
+
+  always:
+    - name: Очистка временных файлов
+      file:
+        path: "{{ platform_temp_dir.path }}"
+        state: absent
+      when: platform_temp_dir is defined and platform_temp_dir.path is defined
+
+- name: Информация об установке платформы
   debug:
-    var: file_check.stdout
-
-- name: Проверка что файл не является HTML
-  fail:
-    msg: "Скачанный файл является HTML, а не архивом. Проверьте учетные данные для 1C ИТС."
-  when: "'HTML' in file_check.stdout"
-
-- name: Распаковка дистрибутива Platform
-  unarchive:
-    src: "{{ platform_temp_dir.path }}/server64_8_3_{{ platform_version | replace('.', '_') }}.zip"
-    dest: "{{ platform_temp_dir.path }}"
-    remote_src: yes
-
-- name: Поиск установщика Platform
-  find:
-    paths: "{{ platform_temp_dir.path }}"
-    patterns: "setup-full-*.run"
-    file_type: file
-    recurse: yes
-  register: platform_installer_find
-
-- name: Вывод пути к установщику
-  debug:
-    var: platform_installer_find.files
-
-- name: Запуск установщика Platform в автоматическом режиме
-  command:
-    cmd: "./{{ platform_installer_find.files[0].path | basename }} --mode unattended --enable-components server,server_admin,ws,liberica_jre"
-    chdir: "{{ platform_installer_find.files[0].path | dirname }}"
-  args:
-    creates: /opt/1cv8/{{ platform_version }}
-
-- name: Очистка временных файлов
-  file:
-    path: "{{ platform_temp_dir.path }}"
-    state: absent
+    msg: "1C:Platform {{ platform_version }} установлена в {{ platform_install_path }}/{{ platform_version }}"
+  when: platform_installed.stat.exists

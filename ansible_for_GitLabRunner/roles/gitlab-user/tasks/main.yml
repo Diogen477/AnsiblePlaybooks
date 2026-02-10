@@ -1,0 +1,103 @@
+---
+- name: Создание группы для GitLab Runner
+  group:
+    name: "{{ gitlab_runner_group }}"
+    state: present
+    system: yes
+
+- name: Создание пользователя для GitLab Runner
+  user:
+    name: "{{ gitlab_runner_user }}"
+    group: "{{ gitlab_runner_group }}"
+    groups: sudo
+    home: "{{ gitlab_runner_home }}"
+    shell: "{{ gitlab_runner_shell }}"
+    create_home: yes
+    system: yes
+    comment: "GitLab Runner User"
+    state: present
+
+- name: Проверка существования пароля для пользователя
+  shell: "passwd -S {{ gitlab_runner_user }} | awk '{print $2}'"
+  register: user_password_status
+  changed_when: false
+  failed_when: false
+
+- name: Информация о необходимости установки пароля
+  debug:
+    msg:
+      - "===================================================="
+      - "ВАЖНО: Пароль для пользователя {{ gitlab_runner_user }} не установлен!"
+      - "===================================================="
+      - "Установите пароль вручную командой:"
+      - "  sudo passwd {{ gitlab_runner_user }}"
+      - ""
+      - "Этот пароль потребуется для:"
+      - "  1. RDP подключения"
+      - "  2. Выполнения sudo команд"
+      - "===================================================="
+  when: user_password_status.stdout != 'P'
+
+- name: Настройка sudo без пароля для GitLab Runner (опционально)
+  lineinfile:
+    path: /etc/sudoers.d/gitlab-runner
+    line: "{{ gitlab_runner_user }} ALL=(ALL) NOPASSWD:ALL"
+    create: yes
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  when: gitlab_runner_sudo_nopasswd | default(false)
+
+- name: Добавление публичного SSH ключа (если указан)
+  authorized_key:
+    user: "{{ gitlab_runner_user }}"
+    key: "{{ gitlab_runner_ssh_key }}"
+    state: present
+  when: gitlab_runner_ssh_key is defined and gitlab_runner_ssh_key | length > 0
+
+- name: Создание директории для рабочих файлов GitLab Runner
+  file:
+    path: "{{ gitlab_runner_home }}/builds"
+    state: directory
+    owner: "{{ gitlab_runner_user }}"
+    group: "{{ gitlab_runner_group }}"
+    mode: '0755'
+
+- name: Создание .bashrc для пользователя
+  template:
+    src: bashrc.j2
+    dest: "{{ gitlab_runner_home }}/.bashrc"
+    owner: "{{ gitlab_runner_user }}"
+    group: "{{ gitlab_runner_group }}"
+    mode: '0644'
+  when: false  # Создайте template при необходимости
+
+- name: Настройка переменных окружения для пользователя
+  blockinfile:
+    path: "{{ gitlab_runner_home }}/.profile"
+    create: yes
+    owner: "{{ gitlab_runner_user }}"
+    group: "{{ gitlab_runner_group }}"
+    mode: '0644'
+    block: |
+      # Java configuration
+      export JAVA_HOME="{{ java_home }}"
+      export PATH="$PATH:$JAVA_HOME/bin"
+      
+      # SonarScanner configuration
+      export PATH="$PATH:{{ sonar_scanner_path }}/bin"
+      
+      # 1C:EDT configuration
+      export PATH="$PATH:{{ edt_install_path }}/{{ edt_version }}"
+      
+      # 1C:Platform configuration
+      export PATH="$PATH:{{ platform_install_path }}/{{ platform_version }}"
+
+- name: Вывод информации о созданном пользователе
+  debug:
+    msg:
+      - "Пользователь GitLab Runner создан успешно"
+      - "Имя пользователя: {{ gitlab_runner_user }}"
+      - "Домашняя директория: {{ gitlab_runner_home }}"
+      - "Группы: {{ gitlab_runner_group }}, sudo"
+      - ""
+      - "Не забудьте установить пароль: sudo passwd {{ gitlab_runner_user }}"

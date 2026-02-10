@@ -3,10 +3,33 @@
   hosts: local
   connection: local
   become: yes
+
+  pre_tasks:
+    - name: Проверка поддерживаемой ОС
+      assert:
+        that:
+          - ansible_os_family == "Debian"
+          - ansible_distribution in ["Ubuntu", "Debian"]
+        fail_msg: "Поддерживаются только Ubuntu и Debian"
+
+    - name: Проверка архитектуры
+      assert:
+        that:
+          - ansible_architecture == "x86_64"
+        fail_msg: "Поддерживается только x86_64"
+
   roles:
     - role: common
+      tags: [base, common]
     - role: java
+      tags: [base, java]
     - role: edt
+      tags: [1c, edt]
     - role: platform
+      tags: [1c, platform]
     - role: sonar-scanner
+      tags: [tools, sonar]
+    - role: gitlab-user
+      tags: [base, user]
     - role: rdp-tools
+      tags: [rdp]

@@ -1,0 +1,29 @@
+---
+galaxy_info:
+  author: Diogen477
+  description: Установка Azul Zulu JDK 17 для GitLab Runner
+  company: 
+  
+  license: MIT
+  
+  min_ansible_version: "2.12"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - java
+    - jdk
+    - azul
+    - zulu
+    - development
+
+dependencies: []
